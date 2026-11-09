@@ -1,0 +1,17 @@
+This repository contains 4 components:
+
+1) original expect 5.45.4 source
+   Location:  http://http.debian.net/debian/pool/main/e/expect/expect_5.45.4.orig.tar.gz
+   directory: expect5.45.4
+
+2) Fedora patches
+   Location:  https://src.fedoraproject.org/rpms/expect
+   directory: fedora
+
+3) Shell script to apply patches:
+   file: apply-expect-patches.sh
+
+4) patched expect 5.45.4 source
+   directory: new-expect5.45.4
+
+Component #4 is recreated from components #1 and #2 by executing script (component #3)
