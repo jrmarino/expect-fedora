@@ -1,0 +1,64 @@
+diff -up expect5.45.4/exp_command.c.exit-sighandler expect5.45.4/exp_command.c
+--- expect5.45.4/exp_command.c.exit-sighandler	2026-08-18 10:47:10.722479406 +0200
++++ expect5.45.4/exp_command.c	2026-08-18 13:01:09.524036587 +0200
+@@ -2516,6 +2516,30 @@ Exp_ExitObjCmd(
+     }
+
+     /*
++     * When exit is called from a signal trap handler (e.g., the default
++     * SIGINT handler runs "exit 130" on Ctrl-C), we may be deep inside
++     * Tcl's event loop via Tcl_AsyncInvoke.  Calling Tcl_Exit in that
++     * context crashes because FinalizeThread tears down the event system
++     * (epoll file descriptors, channel handlers) while it is still in use
++     * on the call stack.  Restore the terminal and exit immediately.
++     */
++    if (exp_in_signal_handler()) {
++	if (exp_onexit_action) {
++	    Tcl_GlobalEval(interp, exp_onexit_action);
++	}
++
++	if (!exp_disconnected
++	    && !exp_forked
++	    && (exp_dev_tty != -1)
++	    && isatty(exp_dev_tty)) {
++	    if (exp_ioctled_devtty) {
++		exp_tty_set(interp, &exp_tty_original, exp_dev_tty, 0);
++	    }
++	}
++	_exit(value);
++    }
++
++    /*
+      * Restore previous definition of close.  Needed when expect is
+      * dynamically loaded after close has been redefined
+      * e.g.  the virtual file system in tclkit
+diff -up expect5.45.4/exp_command.h.exit-sighandler expect5.45.4/exp_command.h
+--- expect5.45.4/exp_command.h.exit-sighandler	2026-08-18 10:47:10.721479410 +0200
++++ expect5.45.4/exp_command.h	2026-08-18 10:51:06.973377387 +0200
+@@ -249,6 +249,7 @@ EXTERN int		exp_2tcl_returnvalue (int);
+ EXTERN void		exp_rearm_sigchld (Tcl_Interp *);
+ EXTERN int		exp_string_to_signal (Tcl_Interp *,char *);
+
++EXTERN int		exp_in_signal_handler (void);
+ EXTERN char *exp_onexit_action;
+
+ #define exp_new(x)	(x *)malloc(sizeof(x))
+diff -up expect5.45.4/exp_trap.c.exit-sighandler expect5.45.4/exp_trap.c
+--- expect5.45.4/exp_trap.c.exit-sighandler	2026-08-18 10:47:10.720479415 +0200
++++ expect5.45.4/exp_trap.c	2026-08-18 10:50:59.578411909 +0200
+@@ -77,6 +77,15 @@ static int current_sig = NO_SIG;
+ int exp_nostack_dump = FALSE;	/* TRUE if user has requested unrolling of */
+ 				/* stack with no trace */
+
++/* Return whether we are currently inside a signal trap handler.
++ * This is used by Exp_ExitObjCmd to avoid calling Tcl_Exit from within
++ * event processing (via Tcl_AsyncInvoke), which would crash because
++ * Tcl_Exit tears down the event system while it is still in use. */
++int
++exp_in_signal_handler(void)
++{
++	return current_sig != NO_SIG;
++}
+
+
+ /*ARGSUSED*/
